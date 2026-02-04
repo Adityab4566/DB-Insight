@@ -1,0 +1,159 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, '3.10', '3.11']
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: db_monitoring_test
+          MYSQL_USER: test_user
+          MYSQL_PASSWORD: test123
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov flake8
+    
+    - name: Wait for MySQL
+      run: |
+        while ! mysqladmin ping -h"127.0.0.1" -P3306 -uroot -proot --silent; do
+          sleep 1
+        done
+    
+    - name: Setup test database
+      run: |
+        mysql -h 127.0.0.1 -P 3306 -u root -proot -e "
+          CREATE DATABASE IF NOT EXISTS db_monitoring_test;
+          CREATE USER IF NOT EXISTS 'test_user'@'%' IDENTIFIED BY 'test123';
+          GRANT SELECT, PROCESS, SHOW DATABASES ON *.* TO 'test_user'@'%';
+          GRANT SELECT ON performance_schema.* TO 'test_user'@'%';
+          GRANT SELECT ON information_schema.* TO 'test_user'@'%';
+          FLUSH PRIVILEGES;
+        "
+    
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Test application startup
+      env:
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: db_monitoring_test
+        DB_USER: test_user
+        DB_PASSWORD: test123
+        FLASK_ENV: testing
+        FLASK_DEBUG: False
+      run: |
+        python -c "
+        import sys
+        sys.path.append('.')
+        from app import create_app
+        app = create_app()
+        print('✅ Application starts successfully')
+        "
+    
+    - name: Test database connection
+      env:
+        DB_HOST: 127.0.0.1
+        DB_PORT: 3306
+        DB_NAME: db_monitoring_test
+        DB_USER: test_user
+        DB_PASSWORD: test123
+      run: |
+        python -c "
+        import sys
+        sys.path.append('.')
+        from database import db_manager
+        result = db_manager.test_connection()
+        if result:
+            print('✅ Database connection successful')
+        else:
+            print('❌ Database connection failed')
+            sys.exit(1)
+        "
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit
+    
+    - name: Check for security vulnerabilities
+      run: |
+        safety check
+        bandit -r . -x ./venv/,./env/,./.venv/
+
+  build:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create deployment package
+      run: |
+        zip -r deployment.zip . -x "*.git*" "*__pycache__*" "*.pyc" ".env*" "venv/*" "env/*"
+    
+    - name: Upload deployment artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-package
+        path: deployment.zip

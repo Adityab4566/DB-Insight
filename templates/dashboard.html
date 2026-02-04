@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Performance Monitoring Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🗄️ Database Performance Monitor</h1>
+            <p>Real-time MySQL performance monitoring and analytics</p>
+        </div>
+        
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-item">
+                <div id="statusIndicator" class="status-indicator status-down"></div>
+                <span>Database Status: <strong id="healthStatus">Checking...</strong></span>
+            </div>
+            <div class="status-item">
+                <span>Connection: <span id="connectionStatus" class="text-warning">Connecting...</span></span>
+            </div>
+            <div class="status-item">
+                <span class="last-updated">Last Updated: <span id="lastUpdated">Never</span></span>
+            </div>
+            <div class="status-item">
+                <button id="refreshBtn" style="padding: 5px 15px; border: none; background: #667eea; color: white; border-radius: 4px; cursor: pointer;">
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+        
+        <!-- Error Container -->
+        <div id="errorContainer"></div>
+        
+        <!-- Metrics Grid -->
+        <div class="metrics-grid">
+            <!-- Active Connections -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Active Connections</span>
+                    <span class="metric-icon">🔗</span>
+                </div>
+                <div class="metric-value" id="activeConnections">0</div>
+                <div class="metric-unit">connections</div>
+                <div class="metric-description">
+                    Current number of active database connections from all clients
+                </div>
+            </div>
+            
+            <!-- Queries Per Second -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Queries Per Second</span>
+                    <span class="metric-icon">⚡</span>
+                </div>
+                <div class="metric-value" id="queriesPerSecond">0</div>
+                <div class="metric-unit">QPS</div>
+                <div class="metric-description">
+                    Average number of queries executed per second
+                </div>
+            </div>
+            
+            <!-- Slow Queries -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Slow Queries</span>
+                    <span class="metric-icon">🐌</span>
+                </div>
+                <div class="metric-value" id="slowQueries">0</div>
+                <div class="metric-unit">total</div>
+                <div class="metric-description">
+                    Total number of queries that exceeded the slow query threshold
+                </div>
+            </div>
+            
+            <!-- Database Uptime -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Database Uptime</span>
+                    <span class="metric-icon">⏱️</span>
+                </div>
+                <div class="metric-value" id="uptime">0s</div>
+                <div class="metric-unit">duration</div>
+                <div class="metric-description">
+                    How long the database server has been running continuously
+                </div>
+            </div>
+            
+            <!-- Database Size -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Database Size</span>
+                    <span class="metric-icon">💾</span>
+                </div>
+                <div class="metric-value" id="databaseSize">0 MB</div>
+                <div class="metric-unit">storage</div>
+                <div class="metric-description">
+                    Total storage space used by all databases and indexes
+                </div>
+            </div>
+            
+            <!-- CPU Usage -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">CPU Usage (Est.)</span>
+                    <span class="metric-icon">🖥️</span>
+                </div>
+                <div class="metric-value" id="cpuUsage">0%</div>
+                <div class="metric-unit">estimated</div>
+                <div class="metric-description">
+                    Estimated CPU usage based on connections and query load
+                </div>
+            </div>
+            
+            <!-- Memory Usage -->
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-title">Memory Usage (Est.)</span>
+                    <span class="metric-icon">🧠</span>
+                </div>
+                <div class="metric-value" id="memoryUsage">0%</div>
+                <div class="metric-unit">estimated</div>
+                <div class="metric-description">
+                    Estimated memory usage including buffer pool and connections
+                </div>
+            </div>
+        </div>
+        
+        <!-- Charts Section -->
+        <div class="charts-section">
+            <div class="charts-header">
+                <h2>📊 Performance Trends</h2>
+                <p>Real-time performance metrics over time</p>
+            </div>
+            
+            <div class="charts-grid">
+                <!-- Active Connections Chart -->
+                <div>
+                    <div class="chart-title">Active Connections Over Time</div>
+                    <div class="chart-container">
+                        <canvas id="connectionsChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- QPS Chart -->
+                <div>
+                    <div class="chart-title">Queries Per Second</div>
+                    <div class="chart-container">
+                        <canvas id="qpsChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Resource Usage Chart -->
+                <div style="grid-column: 1 / -1;">
+                    <div class="chart-title">Resource Usage Trends</div>
+                    <div class="chart-container">
+                        <canvas id="resourceChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Information Section -->
+        <div class="charts-section">
+            <div class="charts-header">
+                <h2>ℹ️ Monitoring Information</h2>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                <div>
+                    <h3>📋 Metrics Explained</h3>
+                    <ul style="line-height: 1.8; color: #666;">
+                        <li><strong>Active Connections:</strong> Current client connections to the database</li>
+                        <li><strong>QPS:</strong> Query throughput indicating database workload</li>
+                        <li><strong>Slow Queries:</strong> Queries taking longer than threshold to execute</li>
+                        <li><strong>Uptime:</strong> Continuous operation time since last restart</li>
+                        <li><strong>Database Size:</strong> Total storage used by all databases</li>
+                        <li><strong>CPU/Memory:</strong> Estimated resource utilization</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h3>⚠️ Alert Thresholds</h3>
+                    <ul style="line-height: 1.8; color: #666;">
+                        <li><strong>High Connections:</strong> > 100 active connections</li>
+                        <li><strong>Slow Queries:</strong> > 100 total slow queries</li>
+                        <li><strong>CPU Usage:</strong> > 80% estimated usage</li>
+                        <li><strong>Memory Usage:</strong> > 90% estimated usage</li>
+                        <li><strong>Connection Issues:</strong> Database unreachable</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h3>🔧 Technical Details</h3>
+                    <ul style="line-height: 1.8; color: #666;">
+                        <li><strong>Data Source:</strong> MySQL Performance Schema</li>
+                        <li><strong>Update Interval:</strong> 5 seconds</li>
+                        <li><strong>Database:</strong> db_monitoring</li>
+                        <li><strong>Access:</strong> Read-only monitoring user</li>
+                        <li><strong>Charts:</strong> Last 20 data points displayed</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div style="text-align: center; margin-top: 30px; padding: 20px; color: #666; border-top: 1px solid #eee;">
+            <p>Database Performance Monitoring Dashboard | Built with Flask, MySQL & Chart.js</p>
+            <p style="font-size: 0.9em; margin-top: 10px;">
+                🔄 Auto-refresh every 5 seconds | 📊 Real-time performance tracking | 🔒 Read-only access
+            </p>
+        </div>
+    </div>
+    
+    <!-- Load Dashboard JavaScript -->
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
