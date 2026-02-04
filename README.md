@@ -7,7 +7,7 @@
 
 A **real-time MySQL database performance monitoring system** built with Flask and Chart.js. This dashboard provides comprehensive insights into your database performance with beautiful visualizations and real-time metrics.
 
-![Dashboard Preview](https://via.placeholder.com/800x400/667eea/ffffff?text=Dashboard+Preview)
+
 
 ## ✨ Features
 
